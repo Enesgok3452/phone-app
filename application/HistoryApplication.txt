@@ -1,0 +1,75 @@
+#ifndef HistoryApplication_HPP
+#define HistoryApplication_HPP
+
+#include <iostream>
+#include <string>
+#include <vector>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+#include "../infrastructure/Db.hpp"
+#include "../domain/History/HistoryService.hpp"
+
+namespace HistoryApplication
+{
+
+    inline std::string getCurrentDateTime()
+    {
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
+        return ss.str();
+    }
+
+    inline void CreateTable(DbContext &dbContext)
+    {
+        HistoryService::CreateTable(dbContext);
+    }
+
+    inline void addHistory(const std::string &dialedName, DbContext &dbContext)
+    {
+        std::string now = getCurrentDateTime();
+       HistoryService::add(dialedName, dbContext);
+    }
+
+    inline void ShowHistory(DbContext &dbContext)
+    {
+        auto histories = HistoryService::GetAll(dbContext);
+
+        for (const auto h : histories)
+        {
+            h.print();
+        }
+    }
+
+    inline void StartMenu(DbContext &dbContext)
+    {
+        int choice;
+        do
+        {
+            std::cout << "\n----- ARAMA GEÇMÝÞÝ MENÜSÜ -----\n";
+            std::cout << "1 - Arama Geçmiþini Göster\n";
+            std::cout << "0 - Geri Dön\n";
+            std::cout << "Seçiminiz: ";
+            std::cin >> choice;
+            std::cin.ignore();
+
+            switch (choice)
+            {
+            case 1:
+                ShowHistory(dbContext);
+                break;
+            case 0:
+                std::cout << "Arama geçmiþi menüsünden çýkýlýyor...\n";
+                break;
+            default:
+                std::cout << "Geçersiz seçim.\n";
+                break;
+            }
+        } while (choice != 0);
+    }
+}
+
+#endif

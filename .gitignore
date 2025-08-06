@@ -1,0 +1,58 @@
+# Derleme dosyalarý
+*.exe
+*.obj
+*.o
+*.dll
+*.pdb
+*.ilk
+*.idb
+*.lib
+
+# IDE ayarlarý
+
+.vscode/
+.idea/
+.vs/
+
+
+# Derleyici geçici dosyalarý
+*.log
+*.ilk
+*.iobj
+*.ipdb
+*.ipch
+
+# Crow framework, Asio gibi kütüphane dosyalarý
+crow/
+asio/
+
+# Build klasörleri (eðer varsa)
+build/
+bin/
+out/
+
+# Veritabaný baðlantý dizini veya config dosyalarý
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Kiþisel ayar dosyalarý, sistem dosyalarý
+.DS_Store
+Thumbs.db
+
+# CMake cache ve dosyalarý (eðer CMake kullanýyorsan)
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Temporary files
+*.tmp
+*.temp
+
+# ODBC config ve log dosyalarý (varsa)
+*.odbc.ini
+*.odbcinst.ini
+
+notes/
