@@ -1,29 +1,3 @@
-/*
-- GETCURRENTDATET�ME (
-S�STEM SAAT�N� ALIP STD::CHRONO VE STD::PUT_TIME KULLANARAK BUNU    Y-A-G-SAAT-DAK�KA-SAN�YE FORMATINA �EV�R�R.
-STd::STR�NGSTREAM BUNU STR�NG E �EV�R�R.)
-
--   PHONEADD (
-BU FONKS�YON JSON VER�S�NDEN �S�M SOY�S�M NUMARA ALIR. TELEFON NUMARASI GE�ERL�YSE VER�TABANINA KAYDEDER E�ER VE INSERTRESPONSE D�NER.
-E�ER GE�ERS�ZSE BOL� (NULLOPT)  D�NER. 
-VAL�DASYON YAPILDI = GE�ERL� M� GE�ERS�Z M� D�YE KONTROL ETME ��LEM�.)
-
-DELETEPHONE (
-JSON VER�S�NDEN ID Y� ALIR VE SERV�CE ARACILI�IYLA VER�TABANINDAN S�LER. ��LEM BA�ARILI MI BA�ARISIZ MI D�YE DELETERESPONSE NESNES� D�ND�R�R. )
-
-NEDEN COUT OLARAK YAZMADIK ? = Web uygulamalar�nda istemciye veri g�ndermek i�in response kullan�l�r, 
-konsola yazmak (cout) sadece geli�tiricinin kendi ekran� i�indir ve istemciye ula�maz.
-
-PHONEUPDATE (
-Bu fonksiyon, JSON�dan al�nan id, name, sname ve pnumber bilgileriyle veritaban�ndaki kayd� g�nceller; G�NCELLEME ��LEM�N�N SONUCUNU 
-SUCCESS DE���KEN�NDE TUTAR , EE�ER G�NCELLEME BA�ARILIYSA UPDATERESPONSE NESNES�NE NAME , SNAME B�LG�LER� ATANIR. VE BA�ARI DURUMUNDA
-SUCCESS = TRUE NESNES�NDE TUTULUR. FONSK�YON KULLANILDI�INDA G�NCELLEME ��LEM� YAPILDIYSA B�LG�LER UPDATERESPONSE OLARAK KAR�I TARAFA MESAJ D�NER.
-)
-*/
-
-
-
-
 #ifndef PHONEAPPLICATION_HPP
 #define PHONEAPPLICATION_HPP
 
@@ -35,6 +9,7 @@ SUCCESS = TRUE NESNES�NDE TUTULUR. FONSK�YON KULLANILDI�INDA G�NCELLEME 
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <optional>
 
 #include "../infrastructure/Db.hpp"
 #include "../domain/phone/PhoneService.hpp"
@@ -56,26 +31,93 @@ SUCCESS = TRUE NESNES�NDE TUTULUR. FONSK�YON KULLANILDI�INDA G�NCELLEME 
 #include "../DTO/response/HistoryResponse.hpp"
 #include "../DTO/request/HistoryRequest.hpp"
 
-namespace PhoneApplication
-{
-    inline std::string getCurrentDateTime()
-    {
+#include "../domain/admin/UserService.hpp"
+#include "../dto/request/LoginRequest.hpp"
+#include "../dto/response/LoginResponse.hpp"
+#include "token.hpp"
+
+namespace PhoneApplication {
+    inline std::string getCurrentDateTime() {
         auto now = std::chrono::system_clock::now();
         std::time_t now_c = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
         ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
         return ss.str();
     }
-//register fonksiyonunda map'e kaydedecek ve key value su olacak. valuesu zaten lambda fonksiyonlar� olacak.
-//run ad�nda bir �al��t�rmaa fonksiyonu olacak. map i �a��rd���nda gelecek.
-    inline std::optional<InsertResponse> PhoneAdd(DbContext &dbContext, const crow::json::rvalue &json)
-    {
+
+    inline bool isTokenValid(DbContext &dbContext, const std::string &token) {
+        auto userOpt = UserService::getUserByToken(dbContext, token);
+        return userOpt.has_value(); // Token varsa geçerli kabul et
+    }
+
+    // Eğer kullanıcı bilgisine ihtiyacın varsa
+    inline std::optional<User> getUserByToken(DbContext &dbContext, const std::string &token) {
+        return UserService::getUserByToken(dbContext, token);
+    }
+
+    inline bool authenticateUser(DbContext &dbContext, const std::string &username, const std::string &inputpassword) {
+        auto userOpt = UserService::getUserByUsername(dbContext, username);
+        if (!userOpt.has_value()) {
+            return false;
+        }
+        User user = userOpt.value();
+        // Not: user.getPassword() veritabanındaki kayıt (düz metin veya hash). Eğer hash saklıyorsan burada aynı hash fonksiyonunu uygulamalısın.
+        return user.getPassword() == inputpassword;
+    }
+
+    inline LoginResponse LoginUser(DbContext &dbContext, const crow::json::rvalue &json) {
+        LoginResponse res;
+        if (!json.has("username") || !json.has("password")) {
+            res.success = false;
+            res.message = "Eksik parametre: username veya password";
+            return res;
+        }
+
+        std::string username = json["username"].s();
+        std::string password = json["password"].s();
+
+        bool authSuccess = authenticateUser(dbContext, username, password);
+        res.success = authSuccess;
+
+        if (authSuccess) {
+            try {
+                UserService::clearUserTokens(dbContext, username); // Eski tokenları temizle
+                std::string token = generateToken();
+
+                // Yeni token'ı kaydet
+                bool saveSuccess = UserService::saveUserToken(dbContext, username, token);
+                if (!saveSuccess) {
+                    res.success = false;
+                    res.message = "Token kaydedilemedi!";
+                    return res;
+                }
+
+                res.message = "Giriş başarılı";
+                res.token = token;
+            }
+            catch (const std::exception &ex) {
+                res.success = false;
+                res.message = std::string("Veritabanı hatası: ") + ex.what();
+            }
+        } else {
+            res.message = "Yetkilendirme hatası: Kullanıcı adı veya şifre yanlış.";
+        }
+
+        return res;
+    }
+
+
+
+    inline std::optional<InsertResponse> PhoneAdd(DbContext &dbContext, const crow::json::rvalue &json) {
+        if (!json.has("name") || !json.has("sname") || !json.has("pnumber")) {
+            return std::nullopt;
+        }
+
         auto name = json["name"].s();
         auto sname = json["sname"].s();
         auto pnumber = json["pnumber"].s();
 
-        if (!PhoneService::isValidPhoneNumber(pnumber))
-        {
+        if (!PhoneService::isValidPhoneNumber(pnumber)) {
             return std::nullopt;
         }
 
@@ -84,39 +126,43 @@ namespace PhoneApplication
         return InsertResponse{name, sname};
     }
 
-    inline DeleteResponse DeletePhone(DbContext &dbContext, const crow::json::rvalue &json)
-    {
+    inline DeleteResponse DeletePhone(DbContext &dbContext, const crow::json::rvalue &json) {
+        DeleteResponse response;
+        if (!json.has("id")) {
+            response.success = false;
+            return response;
+        }
         int id = json["id"].i();
 
-        DeleteResponse response;
         bool result = PhoneService::DeleteById(id, dbContext);
         response.success = result;
         return response;
     }
 
-    inline UpdateResponse PhoneUpdate(DbContext &dbContext, const crow::json::rvalue &json)
-    {
+    inline UpdateResponse PhoneUpdate(DbContext &dbContext, const crow::json::rvalue &json) {
+        UpdateResponse response;
+        if (!json.has("id") || !json.has("name") || !json.has("sname") || !json.has("pnumber")) {
+            response.success = false;
+            return response;
+        }
+
         int id = json["id"].i();
         auto name = json["name"].s();
         auto sname = json["sname"].s();
         auto pnumber = json["pnumber"].s();
 
-        UpdateResponse response;
         bool success = PhoneService::UpdatePhone(dbContext, id, name, sname, pnumber);
         response.success = success;
 
-        if (success)
-        {
+        if (success) {
             response.name = name;
             response.sname = sname;
         }
 
         return response;
     }
-    //crow json değilde dto nesnesi dön. crow onu çeviirebiliyor mu çeviremiyor mu bir kontrol et.
-    //
-    inline crow::json::wvalue FilterPhonesJson(DbContext &dbContext, const crow::json::rvalue &json)
-    {
+
+    inline crow::json::wvalue FilterPhonesJson(DbContext &dbContext, const crow::json::rvalue &json) {
         GetPhoneListRequest request;
         request.filterName = json.has("filterName") ? std::string(json["filterName"].s()) : "";
 
@@ -126,26 +172,23 @@ namespace PhoneApplication
         crow::json::wvalue phones_array = crow::json::wvalue::list();
 
         int index = 0;
-        for (const auto &phone : filteredPhones)
-        {
+        for (const auto &phone: filteredPhones) {
             crow::json::wvalue item;
             item["id"] = phone.getId().value_or(0);
             item["name"] = phone.getName();
             item["sname"] = phone.getSname();
             item["pnumber"] = phone.getPnumber();
-            phones_array[index++] = std::move(item); // push_back yerine indeks ile atama
+            phones_array[index++] = std::move(item);
         }
 
         resultJson["phones"] = std::move(phones_array);
         return resultJson;
     }
 
-    inline CallResponse MakeCall(DbContext &dbContext, const crow::json::rvalue &json)
-    {
+    inline CallResponse MakeCall(DbContext &dbContext, const crow::json::rvalue &json) {
         CallResponse response;
 
-        if (!json.has("pnumber"))
-        {
+        if (!json.has("pnumber")) {
             response.success = false;
             return response;
         }
@@ -154,18 +197,15 @@ namespace PhoneApplication
 
         bool isRegistered = PhoneService::isPhoneExist(pnumber, dbContext);
 
-        if (isRegistered)
-        {
+        if (isRegistered) {
             HistoryService::add(pnumber, dbContext);
         }
 
         response.success = isRegistered;
         return response;
     }
-    // Aynı filterphone işlemini burada da yap.
 
-    inline crow::json::wvalue ShowHistory(DbContext &dbContext, const crow::json::rvalue &json)
-    {
+    inline crow::json::wvalue ShowHistory(DbContext &dbContext, const crow::json::rvalue &json) {
         HistoryRequest request;
         request.filterName = json.has("filterName") ? std::string(json["filterName"].s()) : "";
 
@@ -174,13 +214,12 @@ namespace PhoneApplication
         crow::json::wvalue histories_array = crow::json::wvalue::list();
 
         int index = 0;
-        for (const auto &h : histories)
-        {
+        for (const auto &h: histories) {
             crow::json::wvalue item;
             item["callerName"] = h.getcallerName();
             item["dialedName"] = h.getdialedName();
             item["dialedTime"] = h.getdialedTime();
-            histories_array[index++] = std::move(item); // push_back yerine indeks ile atama
+            histories_array[index++] = std::move(item);
         }
 
         crow::json::wvalue resultJson;
@@ -189,11 +228,9 @@ namespace PhoneApplication
         return resultJson;
     }
 
-    inline std::optional<Phone> FindPhonesById(DbContext &dbContext, int id)
-    {
+    inline std::optional<Phone> FindPhonesById(DbContext &dbContext, int id) {
         return PhoneService::findPhoneById(id, dbContext);
     }
+} // namespace PhoneApplication
 
-}
-
-#endif
+#endif // PHONEAPPLICATION_HPP

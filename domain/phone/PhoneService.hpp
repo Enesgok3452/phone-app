@@ -1,4 +1,4 @@
-#ifndef PHONESERVICE_HPP
+        #ifndef PHONESERVICE_HPP
 #define PHONESERVICE_HPP
 
 #include <algorithm>
@@ -15,7 +15,7 @@
 #include "../domain/phone/Phone.hpp"
 #include "../domain/phone/PhoneFactory.hpp"
 #include "../domain/phone/PhoneRepository.hpp"
-#include "../domain/History/HistoryService.hpp"  // HistoryService çaðrýsý için
+#include "../domain/History/HistoryService.hpp"  // HistoryService ï¿½aï¿½rï¿½sï¿½ iï¿½in
 
 namespace PhoneService
 {
@@ -84,13 +84,13 @@ namespace PhoneService
         return PhoneRepository::findPhoneById(id, dbContext);
     }
 
-    // Arama iþlemi: sadece numara varsa HistoryService üzerinden ekle
+    // Arama iï¿½lemi: sadece numara varsa HistoryService ï¿½zerinden ekle
     inline bool MakeCall(const std::string &pnumber, DbContext &dbContext)
     {
         bool exists = isPhoneExist(pnumber, dbContext);
         if (exists)
         {
-            HistoryService::add(pnumber, dbContext); // HistoryService::add fonksiyonunun signature'sý bu olmalý
+            HistoryService::add(pnumber, dbContext); // HistoryService::add fonksiyonunun signature'sï¿½ bu olmalï¿½
             return true;
         }
         return false;

@@ -1,67 +1,67 @@
-#include <iostream>
-#include <vector>
-#include <string>
-#include <unordered_map>
-#include <functional>
-#include <optional>
+    #include <iostream>
+    #include <vector>
+    #include <string>
+    #include <unordered_map>
+    #include <functional>
+    #include <optional>
 
-#include "asio/include/asio.hpp"
-#include "crow/include/crow/crow_all.h"
+    #include "asio/include/asio.hpp"
+    #include "crow/include/crow/crow_all.h"
 
-#include "../infrastructure/Db.hpp"
-#include "../application/PhoneApplication.hpp"
-#include "ActionsMain.hpp"
+    #include "../infrastructure/Db.hpp"
+    #include "../application/PhoneApplication.hpp"
+    #include "ActionsMain.hpp"
 
-#include <locale.h>
+    #include <locale.h>
 
-int main()
-{
-    setlocale(LC_ALL, "Turkish");
+    int main()
+    {
+        setlocale(LC_ALL, "Turkish");
 
-    crow::SimpleApp app; // Crow uygulamasýný baþlatýr (web server gibi çalýþýr)
+        crow::SimpleApp app; // Crow uygulamasï¿½nï¿½ baï¿½latï¿½r (web server gibi ï¿½alï¿½ï¿½ï¿½r)
 
-    std::string connStr = "Driver={ODBC Driver 17 for SQL Server};Server=ENESGOK;Database=rehberuygulamasi;Trusted_Connection=yes;";
-    DbContext dbContext(connStr); // Veritabaný baðlantýsý kurulur
+        std::string connStr = "Driver={ODBC Driver 17 for SQL Server};Server=ENESGOK;Database=rehberuygulamasi;Trusted_Connection=yes;";
+        DbContext dbContext(connStr); // Veritabanï¿½ baï¿½lantï¿½sï¿½ kurulur
 
-    // ActionFunc: JSON alýp crow::response döndüren fonksiyon tipi
-    // actionMap: "add", "delete" gibi string action'lara karþýlýk gelen iþlemleri tutar
-    std::unordered_map<std::string, std::function<crow::response(const crow::json::rvalue &)>> actionMap;
-    ActionmapsMain(actionMap, dbContext); // actionMap'leri yükler
+        // ActionFunc: JSON alï¿½p crow::response dï¿½ndï¿½ren fonksiyon tipi
+        // actionMap: "add", "delete" gibi string action'lara karï¿½ï¿½lï¿½k gelen iï¿½lemleri tutar
+        std::unordered_map<std::string, std::function<crow::response(const crow::json::rvalue &)>> actionMap;
+        ActionmapsMain(actionMap, dbContext); // actionMap'leri yï¿½kler
 
-    // Tek bir endpoint tanýmlanýr ("/")
-    CROW_ROUTE(app, "/").methods(crow::HTTPMethod::Post)(
-        [&actionMap](const crow::request &req) -> crow::response
-        {
-            std::string action;
-
-            // 1. Öncelikle header'da 'action' var mý kontrol et
-            auto headerIt = req.headers.find("action");
-            if (headerIt != req.headers.end())
+        // Tek bir endpoint tanï¿½mlanï¿½r ("/")
+        CROW_ROUTE(app, "/").methods(crow::HTTPMethod::Post)(
+            [&actionMap](const crow::request &req) -> crow::response
             {
-                action = headerIt->second;
-            }
-            else
-            {
-                // 2. Header'da yoksa body'den json olarak al
-                const auto json = crow::json::load(req.body);
-                if (!json || !json.has("action"))
+                std::string action;
+
+                // 1. ï¿½ncelikle header'da 'action' var mï¿½ kontrol et
+                auto headerIt = req.headers.find("action");
+                if (headerIt != req.headers.end())
                 {
-                    return crow::response(400, "Geçersiz veya Eksik 'action' alaný");
+                    action = headerIt->second;
                 }
-                action = json["action"].s();
-            }
+                else
+                {
+                    // 2. Header'da yoksa body'den json olarak al
+                    const auto json = crow::json::load(req.body);
+                    if (!json || !json.has("action"))
+                    {
+                        return crow::response(400, "Geï¿½ersiz veya Eksik 'action' alanï¿½");
+                    }
+                    action = json["action"].s();
+                }
 
-            try
-            {
-                return actionMap.at(action)(crow::json::load(req.body));
-            }
-            catch (const std::out_of_range &)
-            {
-                return crow::response(400, "Bilinmeyen action");
-            }
-        });
+                try
+                {
+                    return actionMap.at(action)(crow::json::load(req.body));
+                }
+                catch (const std::out_of_range &)
+                {
+                    return crow::response(400, "Bilinmeyen action");
+                }
+            });
 
-    app.port(18080).multithreaded().run(); // Sunucuyu baþlat
+        app.port(18080).multithreaded().run(); // Sunucuyu baï¿½lat
 
-    return 0;
-}
+        return 0;
+    }

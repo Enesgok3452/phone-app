@@ -13,17 +13,24 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/application
         ${PROJECT_SOURCE_DIR}/domain
         ${PROJECT_SOURCE_DIR}/DTO
+        ${PROJECT_SOURCE_DIR}
 )
 
-# Kaynak dosyalar - proje klasör yapýsýna göre düzenle
+# Kaynak dosyalar - proje klasï¿½r yapï¿½sï¿½na gï¿½re dï¿½zenle
 set(SOURCES
         main.cpp
-        # domain ve DTO içindeki .cpp dosyalarýný da ekle, varsa
+        domain/admin/User.hpp
+        domain/admin/UserFactory.hpp
+        domain/admin/UserRepository.hpp
+        domain/admin/UserService.hpp
+        domain/phone/wrapper.h
+        token.hpp
+        # domain ve DTO iï¿½indeki .cpp dosyalarï¿½nï¿½ da ekle, varsa
 )
 
 add_executable(PhoneApp ${SOURCES})
 
-# Windows kütüphane linkleri
+# Windows kï¿½tï¿½phane linkleri
 target_link_libraries(PhoneApp
         odbc32
         ws2_32

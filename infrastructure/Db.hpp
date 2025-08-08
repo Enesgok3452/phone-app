@@ -8,45 +8,31 @@
 #include <sql.h>
 #include <sqlext.h>
 #include <stdexcept>
+#include <memory>
+#include "../domain/phone/wrapper.h"  // Statement sÄ±nÄ±fÄ±nÄ± iÃ§eren dosya
 
-class DbContext
-{
+class DbContext {
 public:
-    SQLHSTMT getStatement()
-    {
-        SQLHDBC conn = getConnection(); // Baðlantýyý al
-        SQLHSTMT hStmt;
-        SQLAllocHandle(SQL_HANDLE_STMT, conn, &hStmt);
-        return hStmt;
-    }
-
-    // Artýk sade ce connection string alýyor
-    DbContext(const std::string &connStr)
-        : connectionString(connStr)
-    {
+    explicit DbContext(const std::string &connStr)
+        : connectionString(connStr) {
         initializeEnvironment();
     }
 
-    ~DbContext()
-    {
+    ~DbContext() {
         cleanup();
     }
 
-    SQLHDBC getConnection()
-    {
+    // BaÄŸlantÄ± havuzundan kullanÄ±labilir baÄŸlantÄ± al
+    SQLHDBC getConnection() {
         std::lock_guard<std::mutex> lock(mutex);
 
-        for (size_t i = 0; i < pool.size(); ++i)
-        {
-            if (!used[i])
-            {
+        for (size_t i = 0; i < pool.size(); ++i) {
+            if (!used[i]) {
                 used[i] = true;
-
                 return pool[i];
             }
         }
 
-        // Yeni baðlantý oluþtur (sýnýrsýz havuz)
         SQLHDBC newConn = createConnection();
         pool.push_back(newConn);
         used.push_back(true);
@@ -54,64 +40,72 @@ public:
         return newConn;
     }
 
-    void releaseConnection(SQLHDBC conn)
-    {
+    // BaÄŸlantÄ±yÄ± havuza geri bÄ±rakÄ±r
+    void releaseConnection(SQLHDBC conn) {
         std::lock_guard<std::mutex> lock(mutex);
 
-        for (size_t i = 0; i < pool.size(); ++i)
-        {
-            if (pool[i] == conn)
-            {
+        for (size_t i = 0; i < pool.size(); ++i) {
+            if (pool[i] == conn) {
                 used[i] = false;
-
                 return;
             }
         }
 
-        // Havuzda yoksa kapat
+        // Havuzda yoksa baÄŸlantÄ±yÄ± kapat
         SQLDisconnect(conn);
         SQLFreeHandle(SQL_HANDLE_DBC, conn);
     }
 
+    // Yeni bir Statement oluÅŸturur ve hazÄ±rlar
+    std::unique_ptr<Statement> createStatement(const std::string &query) {
+        SQLHDBC conn = getConnection();
+        auto stmt = std::make_unique<Statement>(conn);
+        stmt->prepare(query);
+        return stmt;
+    }
+
+    // Ham statement handle almak iÃ§in (gerekirse)
+    SQLHSTMT getStatement() {
+        SQLHDBC conn = getConnection();
+        SQLHSTMT hStmt = nullptr;
+        SQLAllocHandle(SQL_HANDLE_STMT, conn, &hStmt);
+        return hStmt;
+    }
+
 private:
-    void initializeEnvironment()
-    {
+    void initializeEnvironment() {
         SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
         if (!SQL_SUCCEEDED(ret))
-            throw std::runtime_error("ODBC ortamý oluþturulamadý!");
+            throw std::runtime_error("ODBC ortamÄ± oluÅŸturulamadÄ±!");
 
         ret = SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
         if (!SQL_SUCCEEDED(ret))
-            throw std::runtime_error("ODBC sürüm bilgisi ayarlanamadý!");
+            throw std::runtime_error("ODBC sÃ¼rÃ¼m bilgisi ayarlanamadÄ±!");
     }
 
-    SQLHDBC createConnection()
-    {
+    SQLHDBC createConnection() {
         SQLHDBC conn;
         SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_DBC, env, &conn);
         if (!SQL_SUCCEEDED(ret))
-            throw std::runtime_error("ODBC baðlantý handle'ý oluþturulamadý!");
+            throw std::runtime_error("ODBC baÄŸlantÄ± handle'Ä± oluÅŸturulamadÄ±!");
 
         ret = SQLDriverConnect(conn, NULL, (SQLCHAR *)connectionString.c_str(),
                                SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
         if (!SQL_SUCCEEDED(ret))
-            throw std::runtime_error("Veritabanýna baðlanýlamadý!");
+            throw std::runtime_error("VeritabanÄ±na baÄŸlanÄ±lamadÄ±!");
 
         return conn;
     }
 
-    void cleanup()
-    {
-        for (SQLHDBC conn : pool)
-        {
+    void cleanup() {
+        for (SQLHDBC conn : pool) {
             SQLDisconnect(conn);
             SQLFreeHandle(SQL_HANDLE_DBC, conn);
         }
         pool.clear();
         used.clear();
 
-        if (env)
-        {
+        if (env) {
             SQLFreeHandle(SQL_HANDLE_ENV, env);
             env = nullptr;
         }
