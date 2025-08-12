@@ -19,12 +19,14 @@ include_directories(
 # Kaynak dosyalar - proje klas�r yap�s�na g�re d�zenle
 set(SOURCES
         main.cpp
-        domain/admin/User.hpp
-        domain/admin/UserFactory.hpp
-        domain/admin/UserRepository.hpp
-        domain/admin/UserService.hpp
+        domain/User/User.hpp
+        domain/User/UserFactory.hpp
+        domain/User/UserRepository.hpp
+        domain/User/UserService.hpp
         domain/phone/wrapper.h
         token.hpp
+        domain/User/UserWrapper.h
+        application/UserApplication.h
         # domain ve DTO i�indeki .cpp dosyalar�n� da ekle, varsa
 )
 

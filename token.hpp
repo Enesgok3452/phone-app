@@ -1,23 +1,23 @@
 #ifndef TOKEN_HPP
 #define TOKEN_HPP
 
-#include <string>
 #include <random>
+#include <string>
 
-inline std::string generateToken() {
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-
+    inline std::string generateRandomToken(int length = 16) {
+    constexpr char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     std::string token;
-    std::mt19937 gen(std::random_device{}());
-    std::uniform_int_distribution<> dist(0, sizeof(alphanum) - 2);
+    token.resize(length);
 
-    for (int i = 0; i < 32; ++i) {
-        token += alphanum[dist(gen)];
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(0, sizeof(charset) - 2);
+
+    for (int i = 0; i < length; i++) {
+        token[i] = charset[dist(gen)];
     }
     return token;
 }
+
 
 #endif // TOKEN_HPP

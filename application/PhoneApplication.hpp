@@ -16,25 +16,13 @@
 #include "../domain/phone/Phone.hpp"
 #include "../domain/History/HistoryService.hpp"
 #include "../domain/History/History.hpp"
-#include "../domain/History/HistoryFactory.hpp"
-
-#include "../DTO/request/InsertPhoneRequest.hpp"
 #include "../DTO/response/InsertPhoneResponse.hpp"
-#include "../DTO/request/UpdateRequest.hpp"
 #include "../DTO/response/UpdateResponse.hpp"
-#include "../DTO/request/DeletePhoneRequest.hpp"
 #include "../DTO/response/DeletePhoneRespone.hpp"
 #include "../DTO/request/ListPhoneRequest.hpp"
-#include "../DTO/response/ListPhoneResponse.hpp"
-#include "../DTO/request/MakeCallPhoneRequest.hpp"
 #include "../DTO/response/MakeCallResponse.hpp"
-#include "../DTO/response/HistoryResponse.hpp"
 #include "../DTO/request/HistoryRequest.hpp"
-
-#include "../domain/admin/UserService.hpp"
-#include "../dto/request/LoginRequest.hpp"
-#include "../dto/response/LoginResponse.hpp"
-#include "token.hpp"
+#include "UserApplication.h"
 
 namespace PhoneApplication {
     inline std::string getCurrentDateTime() {
@@ -45,70 +33,18 @@ namespace PhoneApplication {
         return ss.str();
     }
 
-    inline bool isTokenValid(DbContext &dbContext, const std::string &token) {
-        auto userOpt = UserService::getUserByToken(dbContext, token);
-        return userOpt.has_value(); // Token varsa geçerli kabul et
-    }
 
-    // Eğer kullanıcı bilgisine ihtiyacın varsa
-    inline std::optional<User> getUserByToken(DbContext &dbContext, const std::string &token) {
-        return UserService::getUserByToken(dbContext, token);
-    }
-
-    inline bool authenticateUser(DbContext &dbContext, const std::string &username, const std::string &inputpassword) {
-        auto userOpt = UserService::getUserByUsername(dbContext, username);
-        if (!userOpt.has_value()) {
-            return false;
+    inline std::optional<InsertResponse> PhoneAdd(DbContext &dbContext, const crow::json::rvalue &json,
+                                                  const std::string &token) {
+        if (!json.has("username")) {
+            return std::nullopt;
         }
-        User user = userOpt.value();
-        // Not: user.getPassword() veritabanındaki kayıt (düz metin veya hash). Eğer hash saklıyorsan burada aynı hash fonksiyonunu uygulamalısın.
-        return user.getPassword() == inputpassword;
-    }
-
-    inline LoginResponse LoginUser(DbContext &dbContext, const crow::json::rvalue &json) {
-        LoginResponse res;
-        if (!json.has("username") || !json.has("password")) {
-            res.success = false;
-            res.message = "Eksik parametre: username veya password";
-            return res;
-        }
-
         std::string username = json["username"].s();
-        std::string password = json["password"].s();
 
-        bool authSuccess = authenticateUser(dbContext, username, password);
-        res.success = authSuccess;
-
-        if (authSuccess) {
-            try {
-                UserService::clearUserTokens(dbContext, username); // Eski tokenları temizle
-                std::string token = generateToken();
-
-                // Yeni token'ı kaydet
-                bool saveSuccess = UserService::saveUserToken(dbContext, username, token);
-                if (!saveSuccess) {
-                    res.success = false;
-                    res.message = "Token kaydedilemedi!";
-                    return res;
-                }
-
-                res.message = "Giriş başarılı";
-                res.token = token;
-            }
-            catch (const std::exception &ex) {
-                res.success = false;
-                res.message = std::string("Veritabanı hatası: ") + ex.what();
-            }
-        } else {
-            res.message = "Yetkilendirme hatası: Kullanıcı adı veya şifre yanlış.";
+        if (!UserApplication::isTokenValidForUser(dbContext, token, username)) {
+            return std::nullopt;
         }
 
-        return res;
-    }
-
-
-
-    inline std::optional<InsertResponse> PhoneAdd(DbContext &dbContext, const crow::json::rvalue &json) {
         if (!json.has("name") || !json.has("sname") || !json.has("pnumber")) {
             return std::nullopt;
         }
@@ -126,8 +62,20 @@ namespace PhoneApplication {
         return InsertResponse{name, sname};
     }
 
-    inline DeleteResponse DeletePhone(DbContext &dbContext, const crow::json::rvalue &json) {
-        DeleteResponse response;
+    inline DeleteResponse DeletePhone(DbContext &dbContext, const crow::json::rvalue &json, const std::string &token) {
+        DeleteResponse response{};
+
+        if (!json.has("username")) {
+            response.success = false;
+            return response;
+        }
+        std::string username = json["username"].s();
+
+        if (!UserApplication::isTokenValidForUser(dbContext, token, username)) {
+            response.success = false;
+            return response;
+        }
+
         if (!json.has("id")) {
             response.success = false;
             return response;
@@ -139,8 +87,19 @@ namespace PhoneApplication {
         return response;
     }
 
-    inline UpdateResponse PhoneUpdate(DbContext &dbContext, const crow::json::rvalue &json) {
-        UpdateResponse response;
+    inline UpdateResponse PhoneUpdate(DbContext &dbContext, const crow::json::rvalue &json, const std::string &token) {
+        UpdateResponse response{};
+
+        if (!json.has("username")) {
+            response.success = false;
+            return response;
+        }
+        std::string username = json["username"].s();
+
+        if (!UserApplication::isTokenValidForUser(dbContext, token, username)) {
+            response.success = false;
+            return response;
+        }
         if (!json.has("id") || !json.has("name") || !json.has("sname") || !json.has("pnumber")) {
             response.success = false;
             return response;
@@ -162,7 +121,19 @@ namespace PhoneApplication {
         return response;
     }
 
-    inline crow::json::wvalue FilterPhonesJson(DbContext &dbContext, const crow::json::rvalue &json) {
+    inline crow::json::wvalue FilterPhonesJson(DbContext &dbContext, const crow::json::rvalue &json,
+                                               const std::string &token) {
+        crow::json::wvalue emptyResult;
+
+        if (!json.has("username")) {
+            return emptyResult;
+        }
+        std::string username = json["username"].s();
+
+        if (!UserApplication::isTokenValidForUser(dbContext, token, username)) {
+            return emptyResult;
+        }
+
         GetPhoneListRequest request;
         request.filterName = json.has("filterName") ? std::string(json["filterName"].s()) : "";
 
@@ -185,27 +156,61 @@ namespace PhoneApplication {
         return resultJson;
     }
 
-    inline CallResponse MakeCall(DbContext &dbContext, const crow::json::rvalue &json) {
-        CallResponse response;
+    inline CallResponse MakeCall(DbContext &dbContext, const crow::json::rvalue &json, const std::string &token) {
+        CallResponse response{};
+        try {
+            if (!json.has("username")) {
+                response.success = false;
+                return response;
+            }
+            std::string username = json["username"].s();
 
-        if (!json.has("pnumber")) {
+            if (!UserApplication::isTokenValidForUser(dbContext, token, username)) {
+                response.success = false;
+                return response;
+            }
+
+            if (!json.has("pnumber")) {
+                response.success = false;
+                return response;
+            }
+
+            std::string pnumber = json["pnumber"].s();
+
+            bool isRegistered = PhoneService::isPhoneExist(pnumber, dbContext);
+
+            if (isRegistered) {
+                try {
+                    HistoryService::add(pnumber, dbContext);
+                } catch (const std::exception &e) {
+                    std::cerr << "[MakeCall] HistoryService::add hata: " << e.what() << std::endl;
+                    response.success = false;
+                    return response;
+                }
+            }
+
+            response.success = isRegistered;
+            return response;
+        } catch (const std::exception &ex) {
+            std::cerr << "[MakeCall] Genel hata: " << ex.what() << std::endl;
             response.success = false;
             return response;
         }
-
-        std::string pnumber = json["pnumber"].s();
-
-        bool isRegistered = PhoneService::isPhoneExist(pnumber, dbContext);
-
-        if (isRegistered) {
-            HistoryService::add(pnumber, dbContext);
-        }
-
-        response.success = isRegistered;
-        return response;
     }
 
-    inline crow::json::wvalue ShowHistory(DbContext &dbContext, const crow::json::rvalue &json) {
+    inline crow::json::wvalue ShowHistory(DbContext &dbContext, const crow::json::rvalue &json,
+                                          const std::string &token) {
+        crow::json::wvalue emptyResult;
+
+        if (!json.has("username")) {
+            return emptyResult;
+        }
+        std::string username = json["username"].s();
+
+        if (!UserApplication::isTokenValidForUser(dbContext, token, username)) {
+            return emptyResult;
+        }
+
         HistoryRequest request;
         request.filterName = json.has("filterName") ? std::string(json["filterName"].s()) : "";
 
@@ -226,10 +231,6 @@ namespace PhoneApplication {
         resultJson["histories"] = std::move(histories_array);
 
         return resultJson;
-    }
-
-    inline std::optional<Phone> FindPhonesById(DbContext &dbContext, int id) {
-        return PhoneService::findPhoneById(id, dbContext);
     }
 } // namespace PhoneApplication
 

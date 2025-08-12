@@ -1,7 +1,6 @@
 #ifndef WRAPPER_HPP
 #define WRAPPER_HPP
 
-
 #include <sqlext.h>
 #include <stdexcept>
 #include <string>
@@ -33,10 +32,12 @@ public:
 
     // Sütun indeksine göre string değer alır
     std::string getString(int colIndex) const {
-        char buffer[512] = {0};
+        char buffer[1024] = {0};
         SQLLEN indicator = 0;
-        if (SQLGetData(stmt, colIndex, SQL_C_CHAR, buffer, sizeof(buffer), &indicator) != SQL_SUCCESS)
+        SQLRETURN ret = SQLGetData(stmt, colIndex, SQL_C_CHAR, buffer, sizeof(buffer), &indicator);
+        if (!(ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)) {
             throw std::runtime_error("SQLGetData failed for string");
+        }
         if (indicator == SQL_NULL_DATA)
             return "";
         return std::string(buffer);
@@ -56,11 +57,10 @@ public:
         return ResultRow(stmt);
     }
 
-    // ResultSet kendi içinde fetch yapmamalı, fetch işini ResultRow yapar.
-    // Bu yüzden bu fetch fonksiyonunu kaldırdım veya kullanımı önerilmez.
-
+    // Bu fetch genellikle kullanılmaz, ResultRow::fetch kullanılmalı
     bool fetch() {
-        return SQLFetch(stmt) == SQL_SUCCESS || SQLFetch(stmt) == SQL_SUCCESS_WITH_INFO;
+        SQLRETURN ret = SQLFetch(stmt);
+        return (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO);
     }
 };
 
